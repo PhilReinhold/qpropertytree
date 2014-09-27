@@ -19,6 +19,7 @@ def increment_name(base_name, existing):
 
 
 class PropItem(QStandardItem):
+
     def get(self):
         return self.text()
 
@@ -36,15 +37,23 @@ class PropItem(QStandardItem):
 
 
 class MetaTreeObject(pyqtWrapperType):
+
     def __new__(cls, name, parents, dct):
         new_dct = dct.copy()
         new_dct["_props"] = _props = {}
         for key, val in dct.items():
             if isinstance(val, PropItem):
-                getter = lambda self, key=key: self._prop_items[key].get()
-                setter = lambda self, value, key=key: self._prop_items[key].set(value)
+                def getter(self):
+                    self._prop_items[key].get()
+
+                def setter(self, value):
+                    self._prop_items[key].set(value)
+
+                def cloner():
+                    val.clone()
+
                 new_dct[key] = property(getter, setter)
-                _props[key] = lambda val=val: val.clone()
+                _props[key] = cloner
 
         return super(MetaTreeObject, cls).__new__(cls, name, parents, new_dct)
 
@@ -88,12 +97,17 @@ class TreeObject(QStandardItem):
     def encode(self):
         return {
             'text': str(self.text()),
-            'children': [(c.__class__.__name__, c.__module__, c.encode()) for c in self.children()],
+            'children': [
+                (c.__class__.__name__, c.__module__, c.encode())
+                for c in self.children()
+            ],
             'props': self.props_table.encode()
         }
 
     def decode(self, d):
-        child_names = [c.name for c in self.parent_or_model().children() if c is not self]
+        child_names = [
+            c.name for c in self.parent_or_model().children() if c is not self
+        ]
         self.setText(increment_name(d['text'], child_names))
         self.props_table.decode(d['props'])
         for class_name, module_name, child_dict in d['children']:
@@ -114,7 +128,9 @@ class TreeObject(QStandardItem):
         self.parent_or_model().appendRow(new_inst)
         new_inst.decode(d)
 
+
 class PropsTable(QStandardItemModel):
+
     def __init__(self):
         super(PropsTable, self).__init__()
         self._items_dict = {}
@@ -138,6 +154,7 @@ class PropsTable(QStandardItemModel):
 
 
 class PropsWidget(QTableView):
+
     def __init__(self, model):
         super(PropsWidget, self).__init__()
         self.setModel(model)
@@ -145,6 +162,7 @@ class PropsWidget(QTableView):
 
 
 class FloatProp(PropItem):
+
     def __init__(self, init):
         super(FloatProp, self).__init__(str(init))
 
@@ -165,7 +183,9 @@ class FloatProp(PropItem):
     def set(self, val):
         self.setText(str(val))
 
+
 class ObjectProp(PropItem):
+
     def __init__(self, cls_or_item):
         if isinstance(cls_or_item, TreeObject):
             super(ObjectProp, self).__init__(cls_or_item.name)
@@ -183,7 +203,8 @@ class ObjectProp(PropItem):
             self.set(pv[0])
 
     def potential_values(self):
-        return [o for o in self.parent_instance.children() if isinstance(o, self.object_class)]
+        return [o for o in self.parent_instance.children()
+                if isinstance(o, self.object_class)]
 
     def create_editor(self):
         w = QComboBox()
@@ -206,14 +227,19 @@ class ObjectProp(PropItem):
 
     def set(self, item):
         self.current_item = item
-        if item == None:
+        if item is None:
             self.setText("None")
         else:
             self.setText(item.name)
 
     def encode(self):
-        item_name = self.current_item.name if self.current_item is not None else None
-        return (item_name, self.object_class.__name__, self.object_class.__module__)
+        item = self.current_item
+        item_name = item.name if item is not None else None
+        return (
+            item_name,
+            self.object_class.__name__,
+            self.object_class.__module__
+        )
 
     def decode(self, val):
         item_name, class_name, module_name = val
@@ -233,7 +259,9 @@ class ObjectProp(PropItem):
         else:
             return ObjectProp(self.current_item)
 
+
 class PropDelegate(QItemDelegate):
+
     def __init__(self, model):
         super(PropDelegate, self).__init__()
         self.model = model
@@ -247,14 +275,18 @@ class PropDelegate(QItemDelegate):
     def setModelData(self, widget, model, index):
         model.itemFromIndex(index).set_data(widget)
 
+
 class TreeModel(QStandardItemModel):
+
     def children(self):
         return [self.item(n, 0) for n in range(self.rowCount())]
 
     def child_names(self):
         return [c.name for c in self.children()]
 
+
 class TreeWidget(QTreeView):
+
     def __init__(self, **kwargs):
         super(TreeWidget, self).__init__(**kwargs)
         self.setContextMenuPolicy(Qt.CustomContextMenu)
@@ -273,6 +305,7 @@ class TreeWidget(QTreeView):
 
 
 class MainWindow(QMainWindow):
+
     def __init__(self, model):
         super(MainWindow, self).__init__()
         self.tree_dock = QDockWidget()
@@ -286,7 +319,9 @@ class MainWindow(QMainWindow):
         self.tree_view.clicked.connect(self.change_props_widget)
 
     def change_props_widget(self, idx):
-        self.props_dock.setWidget(self.tree_view.model().itemFromIndex(idx).props_widget)
+        self.props_dock.setWidget(
+            self.tree_view.model().itemFromIndex(idx).props_widget
+        )
 
 
 if __name__ == '__main__':
@@ -309,7 +344,6 @@ if __name__ == '__main__':
         standard_name = "A"
         child_classes = [B, C]
 
-
     app = QApplication([])
     model = TreeModel()
     root1 = A(model)
@@ -319,4 +353,3 @@ if __name__ == '__main__':
     timer = QTimer()
     timer.singleShot(1, lambda: widget.raise_())
     app.exec_()
-
